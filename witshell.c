@@ -11,6 +11,7 @@ char* get_string();
 char** args_arr(char* string);
 int args_length(char** args);
 int process_args(int args_length, char ** args);
+int redirection(char** args);
 int other_cmds(char ** args);
 int print_error();
 int args_to_path(int args_length, char** args);
@@ -47,7 +48,29 @@ int main(int argc, char* argv[])
     }
     else if (argc == 2)
     {
-        printf("%s %s\n", argv[0], argv[1]);
+        FILE* file = fopen(argv[1], "r");
+
+        if (file == NULL)
+        {
+            print_error();
+        }
+
+        char *line;
+        size_t buffersize = 32;
+        size_t chars;
+
+        line = (char *)malloc(buffersize * sizeof(char)-1);
+
+        while (getline(&line, &buffersize, file) != -1)
+        {
+            int len = strlen(line);
+            line[len-1] = '\0';
+            printf("COMMAND : %s\n",line);
+            char** args = args_arr(line);
+            int args_c = args_length(args);
+            process_args(args_c, args);
+        }
+
     }
 }
 
@@ -154,6 +177,7 @@ int process_args(int args_length, char ** args)
 int other_cmds(char ** args)
 {
     int length = args_length(PATH);
+    int args_len = args_length(args);
     char* arg0 = args[0];
 
     for (int i = 0 ; i < length ; i++)
@@ -169,6 +193,15 @@ int other_cmds(char ** args)
 
             if (pid == 0)
             {
+                int redir_pos =  redirection(args);
+
+                if(redir_pos > 0)
+                {
+                    args[redir_pos] = NULL;
+                    char* filename = args[redir_pos+1];
+                    FILE *fptr = freopen(filename,"w", stdout);
+                }
+
                 int ss = execv(dest, args);
 
                 if (ss == -1)
@@ -196,6 +229,43 @@ int other_cmds(char ** args)
     return 1;
 }
 
+int redirection(char** args)
+{
+    int args_len = args_length(args);
+    int count_redirs = 0;
+    int pos = 0;
+    int file_count = 0;
+
+    for (int i = 0; i < args_len; i++)
+    {
+        if (strcmp(args[i], ">") == 0)
+        {
+            count_redirs++;
+            pos = i;
+        }
+    }
+
+    int i = 1;
+
+    while(args[pos+i] != NULL)
+    {
+        i++;
+        file_count++;
+    }
+
+    if (file_count == 1 && count_redirs == 1)
+    {
+        return pos;
+    }
+    else if (file_count > 1 || count_redirs > 1)
+    {
+        print_error();
+        exit(1);
+    }
+
+    return 0;
+}
+
 int args_to_path(int args_length, char** args)
 {
     char** new_paths = malloc(20 * sizeof(char*));
@@ -221,5 +291,5 @@ int print_error()
 {
     char error_message[30] = "An error has occurred\n";
     fprintf(stderr, error_message, strlen(error_message));
-    return 1;
+    return 0;
 }
